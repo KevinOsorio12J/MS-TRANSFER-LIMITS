@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+printf '%s\n' 'Running Google Java Format, unit tests, and coverage gate before push...'
+mvn -B verify

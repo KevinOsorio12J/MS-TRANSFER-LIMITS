@@ -1,0 +1,137 @@
+openapi: 3.0.3
+info:
+  title: MS-TRANSFER-LIMITS
+  version: 1.0.0
+  description: Consulta y actualización de límites por cuenta/canal; valida transferencias y consume el límite diario.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/v1/accounts/{accountId}/limits:
+    get:
+      summary: Consulta los límites y consumo diario por canal
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Políticas configuradas. Una lista vacía indica que no hay canales configurados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/LimitPolicy'}
+  /api/v1/accounts/{accountId}/limits/{channelId}:
+    put:
+      summary: Crea o actualiza los límites para un canal
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: channelId
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/Channel'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateLimitRequest'}
+      responses:
+        '200':
+          description: Política actualizada
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LimitPolicy'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '422': {$ref: '#/components/responses/LimitRejected'}
+  /api/v1/accounts/{accountId}/transfer-validations:
+    post:
+      summary: Valida y consume el límite diario en una transacción
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TransferRequest'}
+      responses:
+        '200':
+          description: Transferencia aprobada y límite consumido
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TransferDecision'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '422': {$ref: '#/components/responses/LimitRejected'}
+  /actuator/health:
+    get:
+      summary: Estado de salud del servicio
+      responses:
+        '200': {description: Servicio saludable}
+        '503': {description: Servicio no saludable}
+components:
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: {type: string, maxLength: 64}
+  schemas:
+    Channel:
+      type: string
+      enum: [MOBILE_APP, WEB, BRANCH]
+    Money:
+      type: number
+      minimum: 0.01
+      multipleOf: 0.01
+      example: 250.00
+    UpdateLimitRequest:
+      type: object
+      required: [dailyLimit, perOperationLimit]
+      properties:
+        dailyLimit: {$ref: '#/components/schemas/Money'}
+        perOperationLimit: {$ref: '#/components/schemas/Money'}
+    TransferRequest:
+      type: object
+      required: [channel, amount]
+      properties:
+        channel: {$ref: '#/components/schemas/Channel'}
+        amount: {$ref: '#/components/schemas/Money'}
+    LimitPolicy:
+      type: object
+      required: [accountId, channel, dailyLimit, perOperationLimit, consumedToday, usageDate]
+      properties:
+        accountId: {type: string}
+        channel: {$ref: '#/components/schemas/Channel'}
+        dailyLimit: {$ref: '#/components/schemas/Money'}
+        perOperationLimit: {$ref: '#/components/schemas/Money'}
+        consumedToday: {type: number, minimum: 0}
+        usageDate: {type: string, format: date}
+    TransferDecision:
+      type: object
+      properties:
+        approved: {type: boolean, example: true}
+        accountId: {type: string}
+        channel: {$ref: '#/components/schemas/Channel'}
+        amount: {$ref: '#/components/schemas/Money'}
+        consumedToday: {type: number}
+        remainingToday: {type: number}
+        decidedAt: {type: string, format: date-time}
+        rejectionReason: {type: string, nullable: true}
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string, format: uri-reference}
+        code: {type: string}
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    LimitRejected:
+      description: Policy rejected the transfer or update
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
