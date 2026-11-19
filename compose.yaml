@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: transfer_limits
+      POSTGRES_USER: transfer_limits
+      POSTGRES_PASSWORD: transfer_limits
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transfer_limits -d transfer_limits"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes: ["transfer-limits-data:/var/lib/postgresql/data"]
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    ports: ["16686:16686", "4317:4317", "4318:4318"]
+  service:
+    build: .
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/transfer_limits
+      DB_USER: transfer_limits
+      DB_PASSWORD: transfer_limits
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      jaeger: {condition: service_started}
+volumes:
+  transfer-limits-data:
